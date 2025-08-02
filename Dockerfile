@@ -29,6 +29,9 @@ WORKDIR /root/
 # Copy the binary from builder stage
 COPY --from=builder /app/crawler .
 
+# Set execute permissions on the binary
+RUN chmod +x ./crawler
+
 # Add non-root user for security
 RUN addgroup -g 1001 -S crawler && \
     adduser -u 1001 -S crawler -G crawler
