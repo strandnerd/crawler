@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"regexp"
 	"strings"
+	"sync"
 	"time"
 
 	"strandnerd-crawler/internal/models"
+	"golang.org/x/net/html"
 )
 
 // Client handles communication with OpenAI GPT API
@@ -17,16 +20,49 @@ type Client struct {
 	apiKey     string
 	baseURL    string
 	httpClient *http.Client
+	rateLimiter *RateLimiter
 }
 
-// NewClient creates a new LLM client
+// RateLimiter implements a simple token bucket rate limiter
+type RateLimiter struct {
+	mu           sync.Mutex
+	lastRequest  time.Time
+	minInterval  time.Duration
+}
+
+// NewRateLimiter creates a new rate limiter with minimum interval between requests
+func NewRateLimiter(minInterval time.Duration) *RateLimiter {
+	return &RateLimiter{
+		minInterval: minInterval,
+	}
+}
+
+// Wait blocks until it's safe to make another request
+func (rl *RateLimiter) Wait() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	timeSinceLastRequest := now.Sub(rl.lastRequest)
+	
+	if timeSinceLastRequest < rl.minInterval {
+		sleepDuration := rl.minInterval - timeSinceLastRequest
+		log.Printf("🕐 Rate limiting: waiting %v before next LLM request", sleepDuration)
+		time.Sleep(sleepDuration)
+	}
+	
+	rl.lastRequest = time.Now()
+}
+
+// NewClient creates a new LLM client with rate limiting and 5-minute timeout
 func NewClient(apiKey string) *Client {
 	return &Client{
 		apiKey:  apiKey,
 		baseURL: "https://api.openai.com/v1",
 		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
+			Timeout: 5 * time.Minute, // Set timeout to 5 minutes
 		},
+		rateLimiter: NewRateLimiter(1 * time.Second), // Minimum 1 second between requests
 	}
 }
 
@@ -90,6 +126,9 @@ func (c *Client) AnalyzeContent(req *models.ContentAnalysisRequest) (*models.Con
 		log.Printf("🔍 LLM Analysis - Rule-based analysis detected referenced reporting, skipping LLM call")
 		return ruleBasedResult, nil
 	}
+
+	// Apply rate limiting before making API request
+	c.rateLimiter.Wait()
 
 	// Make API request
 	chatReq := ChatCompletionRequest{
@@ -166,11 +205,14 @@ func (c *Client) prepareContentForAnalysis(req *models.ContentAnalysisRequest) s
 	}
 
 	if contentText != "" {
-		// Limit content to first 1500 characters to avoid token limits but get enough context
-		if len(contentText) > 1500 {
-			contentText = contentText[:1500] + "..."
+		// Convert HTML to clean text for LLM analysis
+		cleanText := c.htmlToText(contentText)
+		
+		// Limit content to first 2000 characters to avoid token limits but get enough context
+		if len(cleanText) > 2000 {
+			cleanText = cleanText[:2000] + "..."
 		}
-		parts = append(parts, "Content: "+contentText)
+		parts = append(parts, "Content: "+cleanText)
 	}
 
 	result := strings.Join(parts, "\n\n")
@@ -278,10 +320,10 @@ func (c *Client) parseAnalysisResponse(content string) (*models.ContentAnalysisR
 	jsonStr := content[start:end]
 
 	var response struct {
-		IsPrimaryReporting bool        `json:"is_primary_reporting"`
-		OriginalSourceName interface{} `json:"original_source_name"` // Use interface{} to handle null properly
-		Confidence         float64     `json:"confidence"`
-		Reasoning          string      `json:"reasoning"`
+		IsPrimaryReporting bool    `json:"is_primary_reporting"`
+		OriginalSourceName any     `json:"original_source_name"` // Use any to handle null properly
+		Confidence         float64 `json:"confidence"`
+		Reasoning          string  `json:"reasoning"`
 	}
 
 	if err := json.Unmarshal([]byte(jsonStr), &response); err != nil {
@@ -401,4 +443,91 @@ func (c *Client) ruleBasedAnalysis(content string) *models.ContentAnalysisRespon
 
 	// Let LLM handle the rest - don't be too aggressive with rule-based analysis
 	return nil
+}
+
+// htmlToText converts HTML content to clean text for LLM analysis
+func (c *Client) htmlToText(htmlContent string) string {
+	if htmlContent == "" {
+		return ""
+	}
+
+	// Parse HTML
+	doc, err := html.Parse(strings.NewReader(htmlContent))
+	if err != nil {
+		// If parsing fails, do basic HTML tag removal
+		return c.basicHTMLToText(htmlContent)
+	}
+
+	// Extract text from parsed HTML
+	text := c.extractTextFromNode(doc)
+	
+	// Clean up the text
+	text = c.cleanExtractedText(text)
+	
+	return text
+}
+
+// basicHTMLToText provides fallback HTML to text conversion
+func (c *Client) basicHTMLToText(htmlContent string) string {
+	// Remove script and style tags
+	scriptRegex := regexp.MustCompile(`(?i)<script[^>]*>.*?</script>`)
+	htmlContent = scriptRegex.ReplaceAllString(htmlContent, "")
+	
+	styleRegex := regexp.MustCompile(`(?i)<style[^>]*>.*?</style>`)
+	htmlContent = styleRegex.ReplaceAllString(htmlContent, "")
+	
+	// Convert line break tags to newlines
+	htmlContent = regexp.MustCompile(`(?i)<br\s*/?>|</p>`).ReplaceAllString(htmlContent, "\n")
+	
+	// Remove all other HTML tags
+	tagRegex := regexp.MustCompile(`<[^>]*>`)
+	text := tagRegex.ReplaceAllString(htmlContent, "")
+	
+	return c.cleanExtractedText(text)
+}
+
+// extractTextFromNode recursively extracts text from HTML nodes
+func (c *Client) extractTextFromNode(n *html.Node) string {
+	if n.Type == html.TextNode {
+		return n.Data
+	}
+
+	var text strings.Builder
+	for child := n.FirstChild; child != nil; child = child.NextSibling {
+		// Skip script and style elements
+		if child.Type == html.ElementNode && (child.Data == "script" || child.Data == "style") {
+			continue
+		}
+		
+		// Add line breaks for block elements
+		if child.Type == html.ElementNode {
+			switch child.Data {
+			case "p", "div", "br", "h1", "h2", "h3", "h4", "h5", "h6", "li":
+				text.WriteString(c.extractTextFromNode(child))
+				text.WriteString("\n")
+			default:
+				text.WriteString(c.extractTextFromNode(child))
+			}
+		} else {
+			text.WriteString(c.extractTextFromNode(child))
+		}
+	}
+	return text.String()
+}
+
+// cleanExtractedText cleans up extracted text
+func (c *Client) cleanExtractedText(text string) string {
+	// Decode HTML entities
+	text = html.UnescapeString(text)
+	
+	// Remove excessive whitespace
+	text = regexp.MustCompile(`\s+`).ReplaceAllString(text, " ")
+	
+	// Remove excessive line breaks
+	text = regexp.MustCompile(`\n\s*\n\s*\n`).ReplaceAllString(text, "\n\n")
+	
+	// Trim whitespace
+	text = strings.TrimSpace(text)
+	
+	return text
 }

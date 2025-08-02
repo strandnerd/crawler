@@ -13,15 +13,16 @@ import (
 )
 
 type ContentExtractor struct {
-	client    *http.Client
-	userAgent string
+	client      *http.Client
+	userAgent   string
+	htmlCleaner *HTMLCleaner
 }
 
 func NewContentExtractor(client *http.Client, config *config.Config) *ContentExtractor {
-
 	return &ContentExtractor{
-		client:    client,
-		userAgent: config.UserAgent,
+		client:      client,
+		userAgent:   config.UserAgent,
+		htmlCleaner: NewHTMLCleaner(),
 	}
 }
 
@@ -65,8 +66,9 @@ func (ce *ContentExtractor) ExtractContentFromURL(pageURL string) (*ExtractedCon
 	// Extract Open Graph image (priority)
 	extracted.ImageURL = ce.extractMainImage(doc, pageURL)
 
-	// Extract main content as HTML
-	extracted.FullContent = ce.extractMainContentHTML(doc)
+	// Extract and clean main content as HTML
+	rawContent := ce.extractMainContentHTML(doc)
+	extracted.FullContent = ce.htmlCleaner.CleanHTML(rawContent)
 
 	return extracted, nil
 }
