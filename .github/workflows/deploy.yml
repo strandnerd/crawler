@@ -1,0 +1,144 @@
+name: Deploy Crawler
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+  IMAGE_NAME: strandnerd-crawler
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Log in to Container Registry
+      uses: docker/login-action@v3
+      with:
+        registry: ${{ env.REGISTRY }}
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+
+    - name: Extract metadata (tags, labels) for Docker
+      id: meta
+      uses: docker/metadata-action@v5
+      with:
+        images: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}
+        tags: |
+          type=ref,event=branch
+          type=ref,event=pr
+          type=sha,prefix={{branch}}-
+          type=raw,value=latest,enable={{is_default_branch}}
+
+    - name: Build and push Docker image
+      uses: docker/build-push-action@v5
+      with:
+        context: .
+        push: true
+        tags: ${{ steps.meta.outputs.tags }}
+        labels: ${{ steps.meta.outputs.labels }}
+        cache-from: type=gha
+        cache-to: type=gha,mode=max
+
+    - name: Deploy to server
+      uses: appleboy/ssh-action@v1.0.3
+      with:
+        host: ${{ secrets.DEPLOY_HOST }}
+        username: ${{ secrets.DEPLOY_USER }}
+        key: ${{ secrets.DEPLOY_SSH_KEY }}
+        port: ${{ secrets.DEPLOY_PORT || 22 }}
+        script: |
+          # Navigate to deployment directory
+          cd /opt/strandnerd-crawler || { echo "Deployment directory not found"; exit 1; }
+          
+          # Create environment file if it doesn't exist
+          if [ ! -f .env ]; then
+            echo "Creating .env file..."
+            cat > .env << EOF
+          CMS_BASE_URL=${{ secrets.CMS_BASE_URL }}
+          ACCESS_TOKEN=${{ secrets.ACCESS_TOKEN }}
+          LOG_LEVEL=info
+          FEED_REFRESH_INTERVAL=5
+          REQUEST_TIMEOUT=30
+          MAX_CONCURRENT_CRAWLS=3
+          USER_AGENT=StrandNerd-Crawler/1.0
+          EOF
+          fi
+          
+          # Pull the latest image
+          echo "Pulling latest crawler image..."
+          docker pull ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+          
+          # Update docker-compose.prod.yml with the new image
+          echo "Updating docker-compose configuration..."
+          cat > docker-compose.prod.yml << 'EOF'
+          version: '3.8'
+          
+          services:
+            crawler:
+              image: ${{ env.REGISTRY }}/${{ github.repository_owner }}/${{ env.IMAGE_NAME }}:latest
+              container_name: strandnerd-crawler
+              restart: unless-stopped
+              env_file: .env
+              command: ["-interval", "300"]
+              labels:
+                - "project=strandnerd"
+                - "service=crawler"
+                - "environment=production"
+              logging:
+                driver: "json-file"
+                options:
+                  max-size: "10m"
+                  max-file: "3"
+              deploy:
+                resources:
+                  limits:
+                    memory: 256M
+                    cpus: '0.5'
+                  reservations:
+                    memory: 128M
+                    cpus: '0.25'
+          EOF
+          
+          # Stop and remove existing container
+          echo "Stopping existing crawler..."
+          docker-compose -f docker-compose.prod.yml down || true
+          
+          # Remove old images to save space (keep latest)
+          echo "Cleaning up old images..."
+          docker image prune -f --filter "until=24h" || true
+          
+          # Start the new container
+          echo "Starting new crawler..."
+          docker-compose -f docker-compose.prod.yml up -d
+          
+          # Wait a moment and check if container is running
+          sleep 5
+          if docker-compose -f docker-compose.prod.yml ps | grep -q "Up"; then
+            echo "✅ Crawler deployment successful!"
+            docker-compose -f docker-compose.prod.yml logs --tail 10 crawler
+          else
+            echo "❌ Crawler deployment failed!"
+            docker-compose -f docker-compose.prod.yml logs --tail 20 crawler
+            exit 1
+          fi
+
+    - name: Deployment notification
+      if: always()
+      run: |
+        if [ "${{ job.status }}" == "success" ]; then
+          echo "🚀 Crawler deployed successfully to production!"
+        else
+          echo "❌ Crawler deployment failed!"
+        fi
