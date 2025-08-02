@@ -15,8 +15,8 @@ RUN go mod download
 # Copy source code
 COPY . .
 
-# Build the application
-RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o crawler ./cmd/main.go
+# Build the application with executable permissions
+RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o crawler ./cmd/main.go && chmod +x crawler
 
 # Final stage
 FROM alpine:latest
@@ -26,13 +26,14 @@ RUN apk --no-cache add ca-certificates tzdata
 
 WORKDIR /root/
 
+# Copy the binary from builder stage
+COPY --from=builder /app/crawler ./crawler
+
 # Add non-root user for security
 RUN addgroup -g 1001 -S crawler && \
-    adduser -u 1001 -S crawler -G crawler
-
-# Copy the binary from builder stage and set permissions
-COPY --from=builder --chown=crawler:crawler /app/crawler .
-RUN chmod +x ./crawler
+    adduser -u 1001 -S crawler -G crawler && \
+    chown crawler:crawler ./crawler && \
+    chmod +x ./crawler
 
 USER crawler
 
