@@ -16,6 +16,7 @@ type ContentExtractor struct {
 	client      *http.Client
 	userAgent   string
 	htmlCleaner *HTMLCleaner
+	platformSelectors map[string][]string
 }
 
 func NewContentExtractor(client *http.Client, config *config.Config) *ContentExtractor {
@@ -23,6 +24,183 @@ func NewContentExtractor(client *http.Client, config *config.Config) *ContentExt
 		client:      client,
 		userAgent:   config.UserAgent,
 		htmlCleaner: NewHTMLCleaner(),
+		platformSelectors: initializePlatformSelectors(),
+	}
+}
+
+// initializePlatformSelectors defines content selectors for specific platforms
+func initializePlatformSelectors() map[string][]string {
+	return map[string][]string{
+		// TechCrunch
+		"techcrunch.com": {
+			".wp-block-post-content",
+			".article-content",
+			"[data-module='ArticleBody']",
+			".post-content",
+		},
+		// Medium
+		"medium.com": {
+			"article section",
+			"[data-testid='storyContent']",
+			".story-content",
+			"article div[data-selectable-paragraph]",
+		},
+		// The Verge
+		"theverge.com": {
+			".duet--article--article-body",
+			"[data-testid='ArticleBodyWrapper']",
+			".c-entry-content",
+			".l-article-content",
+		},
+		// Ars Technica
+		"arstechnica.com": {
+			".post-content",
+			"[itemprop='articleBody']",
+			".article-content",
+		},
+		// Wired
+		"wired.com": {
+			"[data-testid='BodyWrapper']",
+			".article__chunks",
+			".content-header + div",
+			"[data-testid='ArticleBodyWrapper']",
+		},
+		// Engadget
+		"engadget.com": {
+			"[data-module='ArticleBody']",
+			".article-text",
+			".o-article_body",
+		},
+		// TechRadar
+		"techradar.com": {
+			"[data-testid='article-body']",
+			"#article-body",
+			".text-copy",
+		},
+		// ZDNet
+		"zdnet.com": {
+			".storyBody",
+			"[data-module='ArticleBody']",
+			".content",
+		},
+		// BBC News
+		"bbc.com": {
+			"[data-component='text-block']",
+			".story-body__inner",
+			"[data-testid='article-text']",
+		},
+		// CNN
+		"cnn.com": {
+			".zn-body__paragraph",
+			"[data-testid='article-content']",
+			".l-container",
+		},
+		// Reuters
+		"reuters.com": {
+			"[data-testid='paragraph']",
+			".ArticleBodyWrapper",
+			".StandardArticleBody",
+		},
+		// The Guardian
+		"theguardian.com": {
+			"[data-gu-name='body']",
+			".content__article-body",
+			"#maincontent",
+		},
+		// New York Times
+		"nytimes.com": {
+			"section[name='articleBody']",
+			".StoryBodyCompanionColumn",
+			"[data-testid='articleBody']",
+		},
+		// Washington Post
+		"washingtonpost.com": {
+			"[data-testid='article-body']",
+			".article-body",
+			"#article-body",
+		},
+		// Wall Street Journal
+		"wsj.com": {
+			"[data-module='ArticleBody']",
+			".wsj-snippet-body",
+			".article-content",
+		},
+		// Forbes
+		"forbes.com": {
+			".article-body",
+			"[data-testid='article-body']",
+			".body-container",
+		},
+		// Hacker News (YCombinator)
+		"news.ycombinator.com": {
+			".comment",
+			".commtext",
+		},
+		// Reddit (for posts that might be crawled)
+		"reddit.com": {
+			"[data-testid='post-content']",
+			".md",
+			"[data-click-id='text']",
+		},
+		// GitHub Blog
+		"github.blog": {
+			".post-content",
+			"[data-testid='article-body']",
+			".markdown-body",
+		},
+		// Stack Overflow Blog
+		"stackoverflow.blog": {
+			".s-prose",
+			".post-content",
+			"[itemprop='text']",
+		},
+		// Dev.to
+		"dev.to": {
+			"[data-article-id] .crayons-article__body",
+			".article-body",
+			"#article-body",
+		},
+		// Substack
+		"substack.com": {
+			".markup",
+			"[data-testid='post-content']",
+			".post-content",
+		},
+		// Blogger/Blogspot
+		"blogspot.com": {
+			".post-body",
+			".entry-content",
+			"[itemprop='articleBody']",
+		},
+		// WordPress.com
+		"wordpress.com": {
+			".entry-content",
+			".post-content",
+			"[data-testid='post-content']",
+		},
+		// Mashable
+		"mashable.com": {
+			"[data-testid='article-body']",
+			".article-content",
+			".blueprint",
+		},
+		// VentureBeat
+		"venturebeat.com": {
+			".article-content",
+			"[data-module='ArticleBody']",
+			".the-content",
+		},
+		// 9to5Mac, 9to5Google, etc.
+		"9to5mac.com": {
+			".post-content",
+			"[data-testid='post-content']",
+			".entry-content",
+		},
+		"9to5google.com": {
+			".post-content",
+			"[data-testid='post-content']",
+			".entry-content",
+		},
 	}
 }
 
@@ -67,7 +245,7 @@ func (ce *ContentExtractor) ExtractContentFromURL(pageURL string) (*ExtractedCon
 	extracted.ImageURL = ce.extractMainImage(doc, pageURL)
 
 	// Extract and clean main content as HTML
-	rawContent := ce.extractMainContentHTML(doc)
+	rawContent := ce.extractMainContentHTMLWithURL(doc, pageURL)
 	extracted.FullContent = ce.htmlCleaner.CleanHTML(rawContent)
 
 	return extracted, nil
@@ -103,10 +281,45 @@ func (ce *ContentExtractor) extractMainImage(doc *html.Node, baseURL string) str
 	return imageURL
 }
 
-// extractMainContentHTML extracts the main content as HTML
+// extractMainContentHTMLWithURL extracts the main content as HTML using platform-specific selectors with known URL
+func (ce *ContentExtractor) extractMainContentHTMLWithURL(doc *html.Node, pageURL string) string {
+	// Try platform-specific selectors first using the known URL
+	if platformSelectors := ce.getPlatformSelectors(pageURL); len(platformSelectors) > 0 {
+		for _, selector := range platformSelectors {
+			if content := ce.extractHTMLFromSelector(doc, selector); content != "" {
+				// Verify content quality before returning
+				if ce.isGoodContent(content) {
+					return ce.cleanHTML(content)
+				}
+			}
+		}
+	}
+
+	// Fallback to document-based extraction
+	return ce.extractMainContentHTML(doc)
+}
+
+// extractMainContentHTML extracts the main content as HTML using generic selectors
 func (ce *ContentExtractor) extractMainContentHTML(doc *html.Node) string {
-	// Priority order for content extraction
-	selectors := []string{
+	// Try to extract the base URL from the document to determine platform
+	baseURL := ce.extractBaseURL(doc)
+	
+	// Try platform-specific selectors if we found a URL in the document
+	if baseURL != "" {
+		if platformSelectors := ce.getPlatformSelectors(baseURL); len(platformSelectors) > 0 {
+			for _, selector := range platformSelectors {
+				if content := ce.extractHTMLFromSelector(doc, selector); content != "" {
+					// Verify content quality before returning
+					if ce.isGoodContent(content) {
+						return ce.cleanHTML(content)
+					}
+				}
+			}
+		}
+	}
+
+	// Fallback to generic selectors
+	genericSelectors := []string{
 		"article",
 		"main",
 		".content",
@@ -116,16 +329,140 @@ func (ce *ContentExtractor) extractMainContentHTML(doc *html.Node) string {
 		".story-body",
 		".post-body",
 		"[role=main]",
+		"[itemprop='articleBody']",
+		".article-body",
+		".post-body-content",
+		".article",
+		".blog-post",
 	}
 
-	for _, selector := range selectors {
+	for _, selector := range genericSelectors {
 		if content := ce.extractHTMLFromSelector(doc, selector); content != "" {
-			return ce.cleanHTML(content)
+			if ce.isGoodContent(content) {
+				return ce.cleanHTML(content)
+			}
 		}
 	}
 
-	// Fallback: try to find the largest content block
+	// Last resort: try to find the largest content block
 	return ce.extractLargestContentBlock(doc)
+}
+
+// extractBaseURL extracts the base URL from HTML document
+func (ce *ContentExtractor) extractBaseURL(doc *html.Node) string {
+	// Look for base tag first
+	if baseTag := ce.findElementBySelector(doc, "base"); baseTag != nil {
+		for _, attr := range baseTag.Attr {
+			if attr.Key == "href" {
+				return attr.Val
+			}
+		}
+	}
+	
+	// Look for canonical URL in meta tags
+	var f func(*html.Node) string
+	f = func(n *html.Node) string {
+		if n.Type == html.ElementNode && n.Data == "link" {
+			var rel, href string
+			for _, attr := range n.Attr {
+				switch attr.Key {
+				case "rel":
+					rel = attr.Val
+				case "href":
+					href = attr.Val
+				}
+			}
+			if rel == "canonical" && href != "" {
+				return href
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			if result := f(c); result != "" {
+				return result
+			}
+		}
+		return ""
+	}
+	
+	return f(doc)
+}
+
+// getPlatformSelectors returns platform-specific selectors for a URL
+func (ce *ContentExtractor) getPlatformSelectors(urlStr string) []string {
+	if urlStr == "" {
+		return nil
+	}
+	
+	parsedURL, err := url.Parse(urlStr)
+	if err != nil {
+		return nil
+	}
+	
+	hostname := strings.ToLower(parsedURL.Hostname())
+	
+	// Direct hostname match
+	if selectors, exists := ce.platformSelectors[hostname]; exists {
+		return selectors
+	}
+	
+	// Try removing www. prefix
+	if strings.HasPrefix(hostname, "www.") {
+		cleanHostname := strings.TrimPrefix(hostname, "www.")
+		if selectors, exists := ce.platformSelectors[cleanHostname]; exists {
+			return selectors
+		}
+	}
+	
+	// Try subdomain matching for known platforms
+	for domain, selectors := range ce.platformSelectors {
+		if strings.HasSuffix(hostname, "."+domain) || strings.HasSuffix(hostname, domain) {
+			return selectors
+		}
+	}
+	
+	return nil
+}
+
+// isGoodContent evaluates if extracted content is meaningful
+func (ce *ContentExtractor) isGoodContent(content string) bool {
+	if content == "" {
+		return false
+	}
+	
+	// Extract text content for analysis
+	textContent := ce.extractTextFromHTML(content)
+	textContent = strings.TrimSpace(textContent)
+	
+	// Minimum length check
+	if len(textContent) < 100 {
+		return false
+	}
+	
+	// Check for reasonable word count (more than just navigation)
+	words := strings.Fields(textContent)
+	if len(words) < 20 {
+		return false
+	}
+	
+	// Check content-to-HTML ratio (avoid overly marked-up content)
+	if len(content) > 0 && float64(len(textContent))/float64(len(content)) < 0.1 {
+		return false
+	}
+	
+	// Avoid navigation-heavy content
+	lowercaseText := strings.ToLower(textContent)
+	navWords := []string{"menu", "navigation", "subscribe", "newsletter", "follow us", "social media", "share this"}
+	navWordCount := 0
+	for _, navWord := range navWords {
+		navWordCount += strings.Count(lowercaseText, navWord)
+	}
+	
+	// If more than 20% of the unique words are navigation-related, it's probably not article content
+	if float64(navWordCount)/float64(len(words)) > 0.2 {
+		return false
+	}
+	
+	return true
 }
 
 // findMetaProperty finds meta tag with specific property
@@ -186,22 +523,13 @@ func (ce *ContentExtractor) findFirstImage(n *html.Node) string {
 	return result
 }
 
-// findElementBySelector finds element by simple selector (tag name or class)
+// findElementBySelector finds element by selector (supports tag, class, id, and attribute selectors)
 func (ce *ContentExtractor) findElementBySelector(n *html.Node, selector string) *html.Node {
 	var result *html.Node
 	var f func(*html.Node)
 	f = func(n *html.Node) {
 		if n.Type == html.ElementNode {
-			// Handle class selector
-			if className, ok := strings.CutPrefix(selector, "."); ok {
-				for _, attr := range n.Attr {
-					if attr.Key == "class" && strings.Contains(attr.Val, className) {
-						result = n
-						return
-					}
-				}
-			} else if n.Data == selector {
-				// Handle tag name selector
+			if ce.matchesSelector(n, selector) {
 				result = n
 				return
 			}
@@ -212,6 +540,174 @@ func (ce *ContentExtractor) findElementBySelector(n *html.Node, selector string)
 	}
 	f(n)
 	return result
+}
+
+// matchesSelector checks if a node matches a given selector
+func (ce *ContentExtractor) matchesSelector(n *html.Node, selector string) bool {
+	selector = strings.TrimSpace(selector)
+	
+	// Handle attribute selectors like [data-testid='article-body'] or [role=main]
+	if strings.HasPrefix(selector, "[") && strings.HasSuffix(selector, "]") {
+		attrPart := strings.Trim(selector, "[]")
+		
+		// Split on = to get attribute and value
+		if strings.Contains(attrPart, "=") {
+			parts := strings.SplitN(attrPart, "=", 2)
+			attrName := strings.TrimSpace(parts[0])
+			attrValue := strings.Trim(strings.TrimSpace(parts[1]), "'\"")
+			
+			for _, attr := range n.Attr {
+				if attr.Key == attrName && attr.Val == attrValue {
+					return true
+				}
+			}
+		} else {
+			// Just check for attribute existence
+			for _, attr := range n.Attr {
+				if attr.Key == strings.TrimSpace(attrPart) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	
+	// Handle ID selector
+	if idName, ok := strings.CutPrefix(selector, "#"); ok {
+		for _, attr := range n.Attr {
+			if attr.Key == "id" && attr.Val == idName {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Handle class selector
+	if className, ok := strings.CutPrefix(selector, "."); ok {
+		for _, attr := range n.Attr {
+			if attr.Key == "class" {
+				classes := strings.Fields(attr.Val)
+				for _, cls := range classes {
+					if cls == className {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+	
+	// Handle space-separated selectors (like "article section")
+	if strings.Contains(selector, " ") {
+		return ce.matchesDescendantSelector(n, selector)
+	}
+	
+	// Handle tag name selector
+	return n.Data == selector
+}
+
+// matchesDescendantSelector handles space-separated selectors like "article section"
+func (ce *ContentExtractor) matchesDescendantSelector(n *html.Node, selector string) bool {
+	parts := strings.Fields(selector)
+	if len(parts) < 2 {
+		return false
+	}
+	
+	// Find if current node matches the last part (avoid infinite recursion)
+	lastSelector := parts[len(parts)-1]
+	if !ce.matchesSimpleSelector(n, lastSelector) {
+		return false
+	}
+	
+	// Check if any ancestor matches the previous selectors
+	if len(parts) == 2 {
+		// Simple case: just check if any ancestor matches the first selector
+		ancestorSelector := parts[0]
+		current := n.Parent
+		
+		for current != nil {
+			if current.Type == html.ElementNode {
+				if ce.matchesSimpleSelector(current, ancestorSelector) {
+					return true
+				}
+			}
+			current = current.Parent
+		}
+	} else {
+		// Complex case: check if any ancestor matches the complex ancestor selector
+		ancestorSelector := strings.Join(parts[:len(parts)-1], " ")
+		current := n.Parent
+		
+		for current != nil {
+			if current.Type == html.ElementNode {
+				if ce.matchesDescendantSelector(current, ancestorSelector) {
+					return true
+				}
+			}
+			current = current.Parent
+		}
+	}
+	
+	return false
+}
+
+// matchesSimpleSelector checks if a node matches a simple (non-descendant) selector
+func (ce *ContentExtractor) matchesSimpleSelector(n *html.Node, selector string) bool {
+	selector = strings.TrimSpace(selector)
+	
+	// Handle attribute selectors like [data-testid='article-body'] or [role=main]
+	if strings.HasPrefix(selector, "[") && strings.HasSuffix(selector, "]") {
+		attrPart := strings.Trim(selector, "[]")
+		
+		// Split on = to get attribute and value
+		if strings.Contains(attrPart, "=") {
+			parts := strings.SplitN(attrPart, "=", 2)
+			attrName := strings.TrimSpace(parts[0])
+			attrValue := strings.Trim(strings.TrimSpace(parts[1]), "'\"")
+			
+			for _, attr := range n.Attr {
+				if attr.Key == attrName && attr.Val == attrValue {
+					return true
+				}
+			}
+		} else {
+			// Just check for attribute existence
+			for _, attr := range n.Attr {
+				if attr.Key == strings.TrimSpace(attrPart) {
+					return true
+				}
+			}
+		}
+		return false
+	}
+	
+	// Handle ID selector
+	if idName, ok := strings.CutPrefix(selector, "#"); ok {
+		for _, attr := range n.Attr {
+			if attr.Key == "id" && attr.Val == idName {
+				return true
+			}
+		}
+		return false
+	}
+	
+	// Handle class selector
+	if className, ok := strings.CutPrefix(selector, "."); ok {
+		for _, attr := range n.Attr {
+			if attr.Key == "class" {
+				classes := strings.Fields(attr.Val)
+				for _, cls := range classes {
+					if cls == className {
+						return true
+					}
+				}
+			}
+		}
+		return false
+	}
+	
+	// Handle tag name selector
+	return n.Data == selector
 }
 
 // extractHTMLFromSelector extracts HTML content from element matching selector
