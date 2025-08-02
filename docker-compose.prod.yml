@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   crawler:
-    image: strandnerd-crawler:latest
+    image: ${CRAWLER_IMAGE}
     container_name: strandnerd-crawler
     restart: unless-stopped
     env_file: .env
