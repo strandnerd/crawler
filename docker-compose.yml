@@ -7,9 +7,6 @@ services:
       dockerfile: Dockerfile
     container_name: strandnerd-crawler
     restart: unless-stopped
-    volumes:
-      # Bind local tenants.yml configuration file (if it exists)
-      - ./tenants.yml:/app/tenants.yml:ro
     environment:
       # CMS API Configuration (legacy - fallback if no tenants.yml)
       CMS_BASE_URL: ${CMS_BASE_URL:-http://localhost}

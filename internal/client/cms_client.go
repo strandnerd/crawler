@@ -40,7 +40,7 @@ func NewCMSClient(baseURL, accessToken string) *CMSClient {
 
 // GetInspirationFeeds fetches all inspiration feeds from the CMS
 func (c *CMSClient) GetInspirationFeeds() ([]models.InspirationFeed, error) {
-	url := fmt.Sprintf("%s/api/v1/crawler/feeds", c.baseURL)
+	url := fmt.Sprintf("%s/api/v1/crawler/inspiration_feeds", c.baseURL)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -71,7 +71,7 @@ func (c *CMSClient) GetInspirationFeeds() ([]models.InspirationFeed, error) {
 
 // GetInspirationFeedByID fetches a specific inspiration feed by ID
 func (c *CMSClient) GetInspirationFeedByID(feedID string) (*models.InspirationFeed, error) {
-	url := fmt.Sprintf("%s/api/v1/crawler/feeds/%s", c.baseURL, feedID)
+	url := fmt.Sprintf("%s/api/v1/crawler/inspiration_feeds/%s", c.baseURL, feedID)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
@@ -106,7 +106,7 @@ func (c *CMSClient) GetInspirationFeedByID(feedID string) (*models.InspirationFe
 
 // CreateInspirationFeedPost creates a new inspiration feed post in the CMS
 func (c *CMSClient) CreateInspirationFeedPost(post *models.CreateInspirationFeedPostRequest) (*models.InspirationFeedPost, error) {
-	url := fmt.Sprintf("%s/api/v1/inspiration-posts", c.baseURL)
+	url := fmt.Sprintf("%s/api/v1/crawler/inspiration_feed_posts", c.baseURL)
 
 	jsonData, err := json.Marshal(post)
 	if err != nil {
@@ -173,7 +173,7 @@ func (c *CMSClient) GetInspirationPosts(feedID string, limit int) ([]models.Insp
 
 // UpdateFeedLastCrawledAt updates the last crawled timestamp for a feed
 func (c *CMSClient) UpdateFeedLastCrawledAt(feedID string) error {
-	url := fmt.Sprintf("%s/api/v1/crawler/feeds/%s/last-crawled", c.baseURL, feedID)
+	url := fmt.Sprintf("%s/api/v1/crawler/inspiration_feeds/%s/last-crawled", c.baseURL, feedID)
 
 	req, err := http.NewRequest("PUT", url, nil)
 	if err != nil {

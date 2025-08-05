@@ -130,11 +130,13 @@ Examples:
 ## CMS API Integration
 
 ### Endpoints Used
-- `GET /api/v1/inspiration-feeds`: Fetch all feeds to crawl
-- `GET /api/v1/inspiration-feeds/{id}`: Get specific feed configuration
+- `GET /api/v1/crawler/inspiration_feeds`: Fetch all feeds to crawl
+- `GET /api/v1/crawler/inspiration_feeds/{id}`: Get specific feed configuration
 - `GET /api/v1/inspiration-posts`: Check for existing posts (duplicate detection)
-- `POST /api/v1/inspiration-posts`: Create new posts from crawled content
-- `PUT /api/v1/inspiration-feeds/{id}/last-crawled`: Update feed crawl timestamps
+- `POST /api/v1/crawler/inspiration_feed_posts`: Create new posts from crawled content
+- `PUT /api/v1/crawler/inspiration_feeds/{id}/last-crawled`: Update feed crawl timestamps
+- `GET /api/v1/crawler/requests/poll`: Poll for crawl requests from queue
+- `DELETE /api/v1/crawler/requests/{id}`: Acknowledge crawl request completion
 
 ### Access Token Requirements
 The crawler requires an access token with permissions for:
@@ -193,7 +195,7 @@ make logs
 make go-run
 
 # Verify API connectivity
-curl -H "Authorization: Bearer $ACCESS_TOKEN" $CMS_BASE_URL/api/v1/inspiration-feeds
+curl -H "Authorization: Bearer $ACCESS_TOKEN" $CMS_BASE_URL/api/v1/crawler/inspiration_feeds
 ```
 
 ### Deployment Process

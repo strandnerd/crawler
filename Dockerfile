@@ -15,6 +15,9 @@ RUN go mod download
 # Copy source code
 COPY . .
 
+# Copy tenants.yml if it exists
+COPY tenants.yml* ./
+
 # Build the application with executable permissions
 RUN CGO_ENABLED=0 GOOS=linux go build -a -installsuffix cgo -o crawler ./cmd/main.go && chmod +x crawler
 
@@ -29,6 +32,9 @@ WORKDIR /app
 
 # Copy the binary from builder stage to /usr/local/bin
 COPY --from=builder /app/crawler /usr/local/bin/crawler
+
+# Copy tenants.yml from builder stage
+COPY --from=builder /app/tenants.yml* /app/
 
 # Add non-root user for security and set permissions
 RUN addgroup -g 1001 -S crawler && \

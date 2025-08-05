@@ -306,11 +306,13 @@ The crawler is deployed using Docker Compose with the following setup:
 
 | Endpoint | Method | Purpose |
 |----------|--------|---------|
-| `/api/v1/inspiration-feeds` | GET | Fetch all feeds |
-| `/api/v1/inspiration-feeds/{id}` | GET | Get specific feed |
+| `/api/v1/crawler/inspiration_feeds` | GET | Fetch all feeds |
+| `/api/v1/crawler/inspiration_feeds/{id}` | GET | Get specific feed |
 | `/api/v1/inspiration-posts` | GET | Check existing posts |
-| `/api/v1/inspiration-posts` | POST | Create new posts |
-| `/api/v1/inspiration-feeds/{id}/last-crawled` | PUT | Update crawl timestamp |
+| `/api/v1/crawler/inspiration_feed_posts` | POST | Create new posts |
+| `/api/v1/crawler/inspiration_feeds/{id}/last-crawled` | PUT | Update crawl timestamp |
+| `/api/v1/crawler/requests/poll` | GET | Poll for crawl requests |
+| `/api/v1/crawler/requests/{id}` | DELETE | Acknowledge crawl completion |
 
 ### Access Token Requirements
 

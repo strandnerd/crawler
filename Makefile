@@ -38,7 +38,7 @@ run:
 
 dev:
 	@echo "Starting crawler in development mode..."
-	docker-compose up
+	docker-compose up --build
 
 test:
 	@echo "Running tests..."
