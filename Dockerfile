@@ -24,7 +24,8 @@ FROM alpine:latest
 # Install ca-certificates for HTTPS requests
 RUN apk --no-cache add ca-certificates tzdata
 
-WORKDIR /root/
+# Create working directory where tenants.yml will be mounted
+WORKDIR /app
 
 # Copy the binary from builder stage to /usr/local/bin
 COPY --from=builder /app/crawler /usr/local/bin/crawler
@@ -32,7 +33,8 @@ COPY --from=builder /app/crawler /usr/local/bin/crawler
 # Add non-root user for security and set permissions
 RUN addgroup -g 1001 -S crawler && \
     adduser -u 1001 -S crawler -G crawler && \
-    chmod +x /usr/local/bin/crawler
+    chmod +x /usr/local/bin/crawler && \
+    chown crawler:crawler /app
 
 USER crawler
 

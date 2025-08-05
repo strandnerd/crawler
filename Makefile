@@ -4,6 +4,11 @@
 help:
 	@echo "StrandNerd Crawler - Available commands:"
 	@echo ""
+	@echo "Configuration:"
+	@echo "  Copy tenants.yml.example to tenants.yml and configure your tenants"
+	@echo "  Docker containers will automatically bind ./tenants.yml:/app/tenants.yml"
+	@echo "  Or use environment variables for single-tenant setup"
+	@echo ""
 	@echo "Development:"
 	@echo "  build           Build the Docker image"
 	@echo "  run             Run crawler once"

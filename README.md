@@ -36,12 +36,60 @@ The crawler fetches inspiration feeds from the CMS, parses RSS content, and crea
 
 ## Configuration
 
-### Environment Variables
+The crawler supports multiple configuration methods:
+
+1. **YAML Configuration (Recommended)**: Use `tenants.yml` for multi-tenant setup
+2. **Environment Variables**: Legacy support for single tenant or environment-based config
+
+### YAML Configuration (Multi-tenant)
+
+Create a `tenants.yml` file in the project root. This file is ignored by git, so copy from the example:
+
+```bash
+cp tenants.yml.example tenants.yml
+# Edit tenants.yml with your configuration
+```
+
+Example `tenants.yml`:
+
+```yaml
+tenants:
+  - id: "main"
+    name: "Main Production Instance"
+    cms_base_url: "https://cms.strandnerd.com/api"
+    access_token: "your-main-access-token-here"
+    enabled: true
+    
+  - id: "dev"
+    name: "Development Instance" 
+    cms_base_url: "https://dev-cms.strandnerd.com/api"
+    access_token: "your-dev-access-token-here"
+    enabled: true
+    
+  - id: "partner1"
+    name: "Partner Site 1"
+    cms_base_url: "https://partner1.example.com/api"
+    access_token: "partner1-access-token"
+    enabled: false  # Can disable tenants temporarily
+
+# Global settings (optional - override environment variables)
+global:
+  log_level: "info"
+  feed_refresh_interval: 5
+  request_timeout: 30
+  max_concurrent_crawls: 3
+  enable_content_analysis: true
+  # openai_api_key: "your-openai-key"  # Can also be set via env var
+```
+
+### Environment Variables (Legacy/Single Tenant)
 
 | Variable | Description | Default | Required |
 |----------|-------------|---------|----------|
-| `CMS_BASE_URL` | Base URL of the CMS API | - | ✅ |
-| `ACCESS_TOKEN` | CMS access token for authentication | - | ✅ |
+| `CMS_BASE_URL` | Base URL of the CMS API (single tenant) | - | ✅* |
+| `ACCESS_TOKEN` | CMS access token (single tenant) | - | ✅* |
+| `TENANT_1_CMS_BASE_URL` | First tenant CMS URL (multi-tenant env) | - | ❌ |
+| `TENANT_1_ACCESS_TOKEN` | First tenant access token (multi-tenant env) | - | ❌ |
 | `OPENAI_API_KEY` | OpenAI API key for content analysis | - | ❌ |
 | `ENABLE_CONTENT_ANALYSIS` | Enable GPT content analysis | `true` | ❌ |
 | `LOG_LEVEL` | Log level (debug, info, warn, error) | `info` | ❌ |
@@ -49,12 +97,25 @@ The crawler fetches inspiration feeds from the CMS, parses RSS content, and crea
 | `REQUEST_TIMEOUT` | HTTP request timeout (seconds) | `30` | ❌ |
 | `MAX_CONCURRENT_CRAWLS` | Maximum concurrent feed crawls | `3` | ❌ |
 | `USER_AGENT` | User agent for RSS requests | `StrandNerd-Crawler/1.0` | ❌ |
+| `PROXY_HOST` | Proxy host for external requests | - | ✅ |
+| `PROXY_AUTH` | Proxy authentication (username:password) | - | ✅ |
 
-### Example .env file
+*Required only when not using YAML configuration
+
+### Example .env file (Legacy)
 
 ```bash
+# Single tenant setup
 CMS_BASE_URL=https://cms.strandnerd.com
 ACCESS_TOKEN=your_access_token_here
+
+# Or multi-tenant environment setup
+TENANT_1_CMS_BASE_URL=https://cms.strandnerd.com
+TENANT_1_ACCESS_TOKEN=your_main_token_here
+TENANT_2_CMS_BASE_URL=https://dev-cms.strandnerd.com  
+TENANT_2_ACCESS_TOKEN=your_dev_token_here
+
+# Common settings
 OPENAI_API_KEY=sk-your_openai_api_key_here
 ENABLE_CONTENT_ANALYSIS=true
 LOG_LEVEL=info
@@ -62,6 +123,8 @@ FEED_REFRESH_INTERVAL=5
 REQUEST_TIMEOUT=30
 MAX_CONCURRENT_CRAWLS=3
 USER_AGENT=StrandNerd-Crawler/1.0
+PROXY_HOST=proxy.example.com:8080
+PROXY_AUTH=username:password
 ```
 
 ## AI Content Analysis
@@ -126,6 +189,11 @@ The AI uses a low temperature setting (0.3) for consistent results and includes 
 
 3. **Run with Docker**:
    ```bash
+   # First, create your tenant configuration
+   cp tenants.yml.example tenants.yml
+   # Edit tenants.yml with your configuration
+   
+   # The Docker containers automatically bind ./tenants.yml:/app/tenants.yml
    make build
    make run      # Run once
    make dev      # Run continuously
@@ -158,16 +226,30 @@ make logs           # View logs
 ./crawler [options]
 
 Options:
-  -once           Run crawl once and exit
-  -feed <id>      Crawl specific feed ID only
-  -interval <sec> Crawl interval in seconds (default: 300)
-  -help           Show help message
+  -once             Run crawl once and exit
+  -feed <id>        Crawl specific feed ID only  
+  -tenant <id>      Run only for specific tenant ID
+  -interval <sec>   Crawl interval in seconds (default: 300)
+  -help             Show help message
 
 Examples:
-  ./crawler -once                    # Run once and exit
-  ./crawler -once -feed abc123       # Crawl specific feed once
-  ./crawler -interval 600            # Run every 10 minutes
+  ./crawler -once                           # Run once for all tenants
+  ./crawler -once -tenant main              # Run once for specific tenant
+  ./crawler -once -feed abc123              # Crawl specific feed for all tenants
+  ./crawler -once -feed abc123 -tenant dev  # Crawl specific feed for specific tenant
+  ./crawler -interval 600                   # Run every 10 minutes for all tenants
+  ./crawler -tenant main                    # Run continuously for specific tenant only
 ```
+
+### Multi-tenant Operation
+
+When using YAML configuration with multiple tenants:
+
+- By default, the crawler processes all enabled tenants
+- Use `-tenant <id>` to run for a specific tenant only
+- Each tenant maintains separate feed lists and crawl schedules
+- Queue processing runs for all tenants every 10 seconds
+- Logs clearly identify which tenant each operation relates to
 
 ## Deployment
 

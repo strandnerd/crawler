@@ -6,6 +6,9 @@ services:
     container_name: strandnerd-crawler
     restart: unless-stopped
     env_file: .env
+    volumes:
+      # Bind local tenants.yml configuration file
+      - ./tenants.yml:/app/tenants.yml:ro
     command: ["-interval", "300"]
     extra_hosts:
       - "host.docker.internal:host-gateway"

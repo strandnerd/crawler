@@ -22,6 +22,9 @@ go.work
 .env.local
 .env.production
 
+# Configuration files (keep examples)
+tenants.yml
+
 # IDE files
 .vscode/
 .idea/
