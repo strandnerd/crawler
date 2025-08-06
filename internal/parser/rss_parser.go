@@ -56,13 +56,27 @@ func (p *RSSParser) ParseFeed(feedURL string) (*models.RSSFeed, error) {
 		return nil, fmt.Errorf("failed to read response: %w", err)
 	}
 
-	// Parse XML
-	var rss models.RSS
-	if err := xml.Unmarshal(body, &rss); err != nil {
-		return nil, fmt.Errorf("failed to parse RSS: %w", err)
+	// Detect feed type by checking the root element
+	bodyStr := string(body)
+	
+	if strings.Contains(bodyStr, `xmlns="http://www.w3.org/2005/Atom"`) || strings.Contains(bodyStr, "<feed") {
+		// Parse as Atom feed
+		var atomFeed models.AtomFeed
+		if err := xml.Unmarshal(body, &atomFeed); err != nil {
+			return nil, fmt.Errorf("failed to parse Atom feed: %w", err)
+		}
+		
+		// Convert Atom to RSS format for consistent processing
+		return convertAtomToRSS(&atomFeed), nil
+	} else {
+		// Parse as RSS feed
+		var rss models.RSS
+		if err := xml.Unmarshal(body, &rss); err != nil {
+			return nil, fmt.Errorf("failed to parse RSS: %w", err)
+		}
+		
+		return &rss.Channel, nil
 	}
-
-	return &rss.Channel, nil
 }
 
 // GetContentExtractor returns the content extractor instance
@@ -184,13 +198,16 @@ func cleanString(s string) string {
 	return strings.TrimSpace(s)
 }
 
-// parseRSSDate tries to parse common RSS date formats
+// parseRSSDate tries to parse common RSS and Atom date formats
 func parseRSSDate(dateStr string) (time.Time, error) {
-	// Common RSS date formats
+	// Common RSS and Atom date formats
 	formats := []string{
-		time.RFC1123Z, // "Mon, 02 Jan 2006 15:04:05 -0700"
+		time.RFC3339,  // "2006-01-02T15:04:05Z07:00" (Atom standard)
+		time.RFC3339Nano, // "2006-01-02T15:04:05.999999999Z07:00" (Atom with nanoseconds)
+		time.RFC1123Z, // "Mon, 02 Jan 2006 15:04:05 -0700" (RSS standard)
 		time.RFC1123,  // "Mon, 02 Jan 2006 15:04:05 MST"
-		time.RFC3339,  // "2006-01-02T15:04:05Z07:00"
+		"2006-01-02T15:04:05-07:00", // Atom without Z
+		"2006-01-02T15:04:05.000Z", // Atom with milliseconds
 		"2006-01-02 15:04:05 -0700",
 		"2006-01-02 15:04:05",
 		"Mon, 2 Jan 2006 15:04:05 -0700",
@@ -204,6 +221,53 @@ func parseRSSDate(dateStr string) (time.Time, error) {
 	}
 
 	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
+}
+
+// convertAtomToRSS converts an Atom feed to RSS format for consistent processing
+func convertAtomToRSS(atomFeed *models.AtomFeed) *models.RSSFeed {
+	rss := &models.RSSFeed{
+		Title:       atomFeed.Title,
+		Description: atomFeed.Subtitle,
+		Items:       make([]models.RSSItem, 0, len(atomFeed.Entries)),
+	}
+
+	// Find the alternate link for the feed
+	for _, link := range atomFeed.Link {
+		if link.Rel == "alternate" || link.Rel == "" {
+			rss.Link = link.Href
+			break
+		}
+	}
+
+	// Convert entries to RSS items
+	for _, entry := range atomFeed.Entries {
+		item := models.RSSItem{
+			Title:       entry.Title,
+			Description: entry.Summary,
+			Content:     entry.Content.Value,
+			Author:      entry.Author.Name,
+			GUID:        entry.ID,
+		}
+
+		// Handle published date - prefer published over updated
+		if entry.Published != "" {
+			item.PubDate = entry.Published
+		} else if entry.Updated != "" {
+			item.PubDate = entry.Updated
+		}
+
+		// Find the alternate link for the entry
+		for _, link := range entry.Link {
+			if link.Rel == "alternate" || link.Rel == "" {
+				item.Link = link.Href
+				break
+			}
+		}
+
+		rss.Items = append(rss.Items, item)
+	}
+
+	return rss
 }
 
 // isImageType checks if the given MIME type is an image

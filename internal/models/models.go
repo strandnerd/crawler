@@ -97,6 +97,45 @@ type RSS struct {
 	Channel RSSFeed `xml:"channel"`
 }
 
+// Atom feed types
+type AtomFeed struct {
+	Title   string      `xml:"title"`
+	Subtitle string     `xml:"subtitle"`
+	Link    []AtomLink  `xml:"link"`
+	Entries []AtomEntry `xml:"entry"`
+}
+
+type AtomEntry struct {
+	Title     string     `xml:"title"`
+	Summary   string     `xml:"summary"`
+	Content   AtomContent `xml:"content"`
+	Link      []AtomLink `xml:"link"`
+	Author    AtomAuthor `xml:"author"`
+	Published string     `xml:"published"`
+	Updated   string     `xml:"updated"`
+	ID        string     `xml:"id"`
+	Category  []AtomCategory `xml:"category"`
+}
+
+type AtomLink struct {
+	Href string `xml:"href,attr"`
+	Rel  string `xml:"rel,attr"`
+	Type string `xml:"type,attr"`
+}
+
+type AtomAuthor struct {
+	Name string `xml:"name"`
+}
+
+type AtomContent struct {
+	Type  string `xml:"type,attr"`
+	Value string `xml:",chardata"`
+}
+
+type AtomCategory struct {
+	Term string `xml:"term,attr"`
+}
+
 // CrawlResult represents the result of crawling a feed
 type CrawlResult struct {
 	FeedID       string
