@@ -1,25 +1,10 @@
-# Multi-Tenant Configuration for StrandNerd Crawler
-# Copy this file to tenants.yml and configure your tenants
-# This file contains examples of how to configure multiple tenants
-
 tenants:
-  # Production tenant - Main StrandNerd instance
-  - id: "production"
+  - id: "strandnerd"
     name: "StrandNerd Production"
     cms_base_url: "https://cms.strandnerd.com/api"
-    access_token: "your-production-access-token-here"
+    access_token: "9e78a094215f167117ef8d2f0cae978e7e5ff6d67fe8cedfa11f606885b0be68"
     enabled: true
     # Optional: Custom crawl interval in minutes (overrides global setting)
-    crawl_interval: 5
+    # crawl_interval: 5
     # Optional: Maximum posts to process per crawl (prevents overload)
-    max_posts_per_crawl: 100
-
-  # Another Tenant
-  - id: "development"
-    name: "StrandNerd Development"
-    cms_base_url: "https://dev-cms.strandnerd.com/api"
-    access_token: "your-development-access-token-here"
-    enabled: true
-    # Dev environment might crawl less frequently
-    crawl_interval: 15
-    max_posts_per_crawl: 50
+    # max_posts_per_crawl: 100

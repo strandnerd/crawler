@@ -33,9 +33,6 @@ WORKDIR /app
 # Copy the binary from builder stage to /usr/local/bin
 COPY --from=builder /app/crawler /usr/local/bin/crawler
 
-# Copy tenants.yml from builder stage
-COPY --from=builder /app/tenants.yml* /app/
-
 # Add non-root user for security and set permissions
 RUN addgroup -g 1001 -S crawler && \
     adduser -u 1001 -S crawler -G crawler && \

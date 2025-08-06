@@ -142,7 +142,7 @@ func (c *CMSClient) CreateInspirationFeedPost(post *models.CreateInspirationFeed
 
 // GetInspirationPosts fetches existing inspiration posts to check for duplicates
 func (c *CMSClient) GetInspirationPosts(feedID string, limit int) ([]models.InspirationFeedPost, error) {
-	url := fmt.Sprintf("%s/api/v1/inspiration-posts?feed_id=%s&limit=%d", c.baseURL, feedID, limit)
+	url := fmt.Sprintf("%s/api/v1/crawler/inspiration_feed_posts?feed_id=%s&limit=%d", c.baseURL, feedID, limit)
 
 	req, err := http.NewRequest("GET", url, nil)
 	if err != nil {
